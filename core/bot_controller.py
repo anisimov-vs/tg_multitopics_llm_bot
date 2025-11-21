@@ -9,7 +9,7 @@ from decorators import operation, resilient_request
 import asyncio
 import uuid
 import secrets
-from typing import Dict, Tuple, List, Optional, Union, cast, AsyncIterator, Any
+from typing import Dict, Tuple, List, Optional, cast, Any
 import traceback
 import time
 import mimetypes
@@ -297,7 +297,7 @@ class BotController:
         attachments: List[AttachmentInput],
     ) -> None:
         try:
-            provider_name = conversation.provider
+            provider_name = conversation.provider or "perplexity"
             model = conversation.model
 
             provider = self.provider_manager.get_provider(provider_name, model)
@@ -434,7 +434,7 @@ class BotController:
             await self.storage.save_asset(page_id, asset)
 
         model = conversation.model
-        provider_name = conversation.provider
+        provider_name = conversation.provider or "perplexity"
 
         provider = self.provider_manager.get_provider(provider_name, model)
 

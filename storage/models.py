@@ -1,4 +1,4 @@
-from typing import Optional, Dict, List, Any, TypeVar, Generic
+from typing import Optional, Dict, List, Any, TypeVar, Generic, Self, overload, cast
 from datetime import datetime, timezone
 from enum import Enum, auto
 
@@ -24,12 +24,24 @@ class JSONProperty(Generic[T]):
     Automatically handles dictionary copying to ensure SQLAlchemy detects changes.
     """
 
-    def __init__(self, json_field_name: str, key: str, default: T = None):
+    def __init__(self, json_field_name: str, key: str, default: Optional[T] = None):
         self.json_field_name = json_field_name
         self.key = key
         self.default = default
 
-    def __get__(self, instance: Any, owner: Any) -> T:
+    @overload
+    def __get__(
+        self, instance: None, owner: Any
+    ) -> Self:  # pragma: no cover - descriptor protocol
+        ...
+
+    @overload
+    def __get__(
+        self, instance: Any, owner: Any
+    ) -> Optional[T]:  # pragma: no cover - descriptor protocol
+        ...
+
+    def __get__(self, instance: Any, owner: Any) -> Optional[T] | Self:
         if instance is None:
             return self
 
@@ -39,7 +51,9 @@ class JSONProperty(Generic[T]):
         if data_dict is None:
             return self.default
 
-        return data_dict.get(self.key, self.default)
+        value = data_dict.get(self.key, self.default)
+        # `data_dict` is a Dict[str, Any]; help mypy understand the concrete type
+        return cast(Optional[T], value)
 
     def __set__(self, instance: Any, value: T) -> None:
         # Retrieve existing dictionary or create a new one
