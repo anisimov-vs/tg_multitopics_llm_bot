@@ -47,6 +47,10 @@ jobs:
         run: |
           pre-commit run --all-files --color always --verbose --show-diff-on-failure
 
+      - name: Run pytests
+        run: |
+          python -m pytest -vv -s tests
+
       - name: Run mypy
         run: |
           python -m mypy --config-file mypy.ini --python-version 3.12 config core decorators providers storage utils main.py

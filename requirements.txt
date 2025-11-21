@@ -10,6 +10,7 @@ openai==1.109.1
 pre-commit
 pyngrok==7.1.6
 pytest
+pytest-asyncio
 python-dotenv==1.0.1
 sqlalchemy==2.0.38
 telegramify-markdown==0.5.2
