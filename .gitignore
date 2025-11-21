@@ -1,0 +1,38 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+.venv/
+env/
+
+# Environment Variables (Secrets)
+.env
+
+# Database (SQLite)
+*.sqlite3
+*.db
+*.db-journal
+var/*.sqlite3
+
+# IDE / Editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Type Checking
+.mypy_cache/
+dmypy.json
+
+# Logs
+*.log
+logs/
+
+# MyPy
+.mypy_cache/
