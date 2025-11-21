@@ -297,8 +297,9 @@ class BotController:
         attachments: List[AttachmentInput],
     ) -> None:
         try:
-            provider_name = conversation.meta_data.get("provider", "perplexity")
-            model = conversation.meta_data.get("model", "auto")
+            provider_name = conversation.provider
+            model = conversation.model
+
             provider = self.provider_manager.get_provider(provider_name, model)
 
             accumulated_text = ""
@@ -432,10 +433,10 @@ class BotController:
         for asset in assets:
             await self.storage.save_asset(page_id, asset)
 
-        model = conversation.meta_data.get("model", "auto")
-        provider = self.provider_manager.get_provider(
-            conversation.meta_data.get("provider", "perplexity"), model
-        )
+        model = conversation.model
+        provider_name = conversation.provider
+
+        provider = self.provider_manager.get_provider(provider_name, model)
 
         keyboard = self._create_keyboard(page_id, assets, conversation, provider)
 

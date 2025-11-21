@@ -1,10 +1,8 @@
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, TypeVar, Generic
 from datetime import datetime, timezone
 from enum import Enum, auto
-import json
 
 from sqlalchemy import (
-    Column,
     String,
     Integer,
     Text,
@@ -13,10 +11,44 @@ from sqlalchemy import (
     DateTime,
     LargeBinary,
     BigInteger,
-    select,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 from sqlalchemy.ext.asyncio import AsyncAttrs
+
+T = TypeVar("T")
+
+
+class JSONProperty(Generic[T]):
+    """
+    Descriptor for convenient access to keys within a JSON column.
+    Automatically handles dictionary copying to ensure SQLAlchemy detects changes.
+    """
+
+    def __init__(self, json_field_name: str, key: str, default: T = None):
+        self.json_field_name = json_field_name
+        self.key = key
+        self.default = default
+
+    def __get__(self, instance: Any, owner: Any) -> T:
+        if instance is None:
+            return self
+
+        # Retrieve the dictionary from the model instance
+        data_dict = getattr(instance, self.json_field_name)
+
+        if data_dict is None:
+            return self.default
+
+        return data_dict.get(self.key, self.default)
+
+    def __set__(self, instance: Any, value: T) -> None:
+        # Retrieve existing dictionary or create a new one
+        current_data = getattr(instance, self.json_field_name) or {}
+
+        new_data = current_data.copy()
+        new_data[self.key] = value
+
+        setattr(instance, self.json_field_name, new_data)
 
 
 class MessageRole(Enum):
@@ -127,6 +159,17 @@ class Conversation(Base):
         order_by="ConversationMessage.timestamp",
     )
 
+    provider: JSONProperty[str] = JSONProperty(
+        "meta_data_json", "provider", default="perplexity"
+    )
+    model: JSONProperty[str] = JSONProperty("meta_data_json", "model", default="auto")
+    perplexity_thread_id: JSONProperty[Optional[str]] = JSONProperty(
+        "meta_data_json", "perplexity_thread_id"
+    )
+    perplexity_thread_url: JSONProperty[Optional[str]] = JSONProperty(
+        "meta_data_json", "perplexity_thread_url"
+    )
+
     @property
     def meta_data(self) -> Dict[str, Any]:
         return self.meta_data_json
@@ -163,7 +206,7 @@ class Conversation(Base):
 
 
 class WebPage(Base):
-    """Web page meta_data for viewing answers"""
+    """Web page metadata for viewing answers"""
 
     __tablename__ = "web_pages"
 
@@ -222,6 +265,13 @@ class UserSetting(Base):
         DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    default_provider: JSONProperty[str] = JSONProperty(
+        "settings_json", "default_provider", default="perplexity"
+    )
+    default_model: JSONProperty[str] = JSONProperty(
+        "settings_json", "default_model", default="auto"
     )
 
 
