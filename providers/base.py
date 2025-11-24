@@ -2,15 +2,16 @@ from storage import ProviderType, ProviderCapability, Conversation, DatabaseMana
 from config import logger
 from typing import (
     AsyncIterator,
-    Dict,
     List,
     Protocol,
-    Type,
     runtime_checkable,
     Optional,
     TypedDict,
+    Dict,
+    Type,
+    Any,
 )
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, ABCMeta
 from aiogram.types import InlineKeyboardButton
 
 
@@ -26,6 +27,39 @@ class AttachmentInput(TypedDict):
     filename: str
     content_type: str
     data: bytes
+
+
+class LLMProviderMeta(ABCMeta):
+    """
+    Metaclass for LLM Providers.
+    1. Auto-registers classes into a central registry.
+    2. Validates that required class attributes exist at definition time.
+    """
+
+    registry: Dict[str, Type["BaseLLMProvider"]] = {}
+
+    def __new__(
+        mcs, name: str, bases: tuple[Type[Any], ...], namespace: dict[str, Any]
+    ) -> Type[Any]:
+        cls: Type[Any] = super().__new__(mcs, name, bases, namespace)
+
+        if name in ("BaseLLMProvider", "OpenAICompatibleProvider"):
+            return cls
+
+        provider_name = namespace.get("PROVIDER_NAME")
+
+        if provider_name:
+            if provider_name in mcs.registry:
+                logger.warning(
+                    f"Duplicate provider name detected: {provider_name}. Overwriting."
+                )
+
+            mcs.registry[provider_name] = cls
+            logger.debug(
+                f"Auto-registered provider '{provider_name}' from class '{name}'"
+            )
+
+        return cls
 
 
 @runtime_checkable
@@ -57,11 +91,22 @@ class LLMProvider(Protocol):
         ...
 
 
-class BaseLLMProvider(ABC):
+class BaseLLMProvider(metaclass=LLMProviderMeta):
     """Abstract base class for LLM providers"""
+
+    PROVIDER_NAME: str
 
     def __init__(self, storage: DatabaseManager):
         self.storage = storage
+
+    @classmethod
+    @abstractmethod
+    def create_config(cls, config: Any) -> Optional[Dict[str, Any]]:
+        """
+        Check global config and return constructor args if enabled.
+        Return None if dependencies (keys/cookies) are missing.
+        """
+        pass
 
     @property
     @abstractmethod

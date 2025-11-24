@@ -1,10 +1,12 @@
 from .openai_compatible import OpenAICompatibleProvider
 from storage import DatabaseManager
-from typing import List, Optional
+from typing import List, Optional, Any, Dict
 
 
 class GroqProvider(OpenAICompatibleProvider):
     """Groq implementation using the OpenAI Compatible provider"""
+
+    PROVIDER_NAME = "groq"
 
     AVAILABLE_MODELS = [
         "llama-3.1-8b-instant",
@@ -31,6 +33,24 @@ class GroqProvider(OpenAICompatibleProvider):
             model=model or "llama-3.3-70b-versatile",
             default_system_prompt="You are a helpful, fast, and precise AI assistant powered by Groq.",
         )
+
+    @classmethod
+    def create_config(cls, config: Any) -> Optional[Dict[str, Any]]:
+        raw_key = config.GROQ_API_KEY
+        if not raw_key:
+            return None
+        key = str(raw_key).strip()
+        if (
+            not key
+            or key.lower() == "none"
+            or not key.startswith("gsk_")
+            or len(key) != 56
+        ):
+            return None
+        return {
+            "api_key": config.GROQ_API_KEY,
+            "model": config.GROQ_MODEL or "llama-3.3-70b-versatile",
+        }
 
     def get_available_models(self) -> List[str]:
         return self.AVAILABLE_MODELS.copy()

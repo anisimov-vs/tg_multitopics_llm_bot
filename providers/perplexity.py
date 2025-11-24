@@ -15,6 +15,8 @@ from aiogram.types import InlineKeyboardButton
 class PerplexityProvider(BaseLLMProvider):
     """Perplexity LLM provider"""
 
+    PROVIDER_NAME = "perplexity"
+
     AVAILABLE_MODELS = [
         "auto",
         "sonar",
@@ -55,6 +57,16 @@ class PerplexityProvider(BaseLLMProvider):
         self.session: Optional[AsyncSession] = None
         self._init_session()
         logger.info(f"Perplexity provider initialized (model: {self.model})")
+
+    @classmethod
+    def create_config(cls, config: Any) -> Optional[Dict[str, Any]]:
+        return (
+            {"cookies": c, "model": config.PERPLEXITY_MODEL or "auto"}
+            if (c := config.PERPLEXITY_COOKIES)
+            and len(str(c).strip()) > 20
+            and "=" in str(c)
+            else None
+        )
 
     @property
     def provider_type(self) -> ProviderType:

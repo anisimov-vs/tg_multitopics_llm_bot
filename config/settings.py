@@ -2,7 +2,7 @@ import os
 from typing import Any, Type, Optional, Union
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 
 class EnvVar:
@@ -85,16 +85,3 @@ class Config:
     INITIAL_RETRY_DELAY = EnvVar("INITIAL_RETRY_DELAY", default=1.0, cast=float)
     MAX_RETRY_DELAY = EnvVar("MAX_RETRY_DELAY", default=60.0, cast=float)
     MAX_RETRIES = EnvVar("MAX_RETRIES", default=5, cast=int)
-
-    @classmethod
-    def validate(cls) -> None:
-        _ = cls.BOT_TOKEN
-
-        provider = cls.PROVIDER_NAME
-        if provider == "perplexity" and not cls.PERPLEXITY_COOKIES:
-            raise ValueError(
-                "PERPLEXITY_COOKIES required when PROVIDER_NAME is 'perplexity'"
-            )
-
-        if provider == "groq" and not cls.GROQ_API_KEY:
-            raise ValueError("GROQ_API_KEY required when PROVIDER_NAME is 'groq'")

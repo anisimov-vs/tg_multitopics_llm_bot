@@ -11,14 +11,12 @@ from .models import (
 )
 from decorators import db_lock_retry
 
-import json
 import asyncio
 from pathlib import Path
 from typing import Optional, List, Dict, Any
-from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession
-from sqlalchemy import select, delete, update
+from sqlalchemy import select, delete
 from sqlalchemy.orm import selectinload
 
 

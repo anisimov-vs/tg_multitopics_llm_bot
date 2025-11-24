@@ -1,6 +1,6 @@
 from config import Config, logger
 from storage import DatabaseManager
-from providers import ProviderManager, PerplexityProvider, GroqProvider
+from providers import ProviderManager
 from utils import MessageFormatter, WebServer
 from core import (
     BotController,
@@ -8,7 +8,6 @@ from core import (
     handle_assets_menu,
     handle_asset_download,
     handle_assets_back,
-    KeyboardHandler,
 )
 
 import sys
@@ -23,34 +22,12 @@ from aiogram.client.default import DefaultBotProperties
 async def main() -> None:
     """Main entry point"""
     try:
-        Config.validate()
         storage = DatabaseManager(Config.DATABASE_PATH)
 
         provider_manager = ProviderManager(storage)
 
-        if Config.PERPLEXITY_COOKIES:
-            provider_manager.register(
-                "perplexity",
-                PerplexityProvider,
-                {
-                    "cookies": Config.PERPLEXITY_COOKIES,
-                    "model": Config.PERPLEXITY_MODEL or "auto",
-                },
-            )
-        else:
-            logger.warning("PERPLEXITY_COOKIES not found, Perplexity provider skipped.")
-
-        if Config.GROQ_API_KEY:
-            provider_manager.register(
-                "groq",
-                GroqProvider,
-                {
-                    "api_key": Config.GROQ_API_KEY,
-                    "model": Config.GROQ_MODEL or "llama-3.3-70b-versatile",
-                },
-            )
-        else:
-            logger.warning("GROQ_API_KEY not found, Groq provider skipped.")
+        # Auto-load and configure all providers found in the registry
+        provider_manager.load_providers(Config)
 
         formatter = MessageFormatter()
         web_server = WebServer(

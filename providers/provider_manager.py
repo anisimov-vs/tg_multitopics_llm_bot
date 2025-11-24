@@ -1,4 +1,4 @@
-from .base import BaseLLMProvider
+from .base import BaseLLMProvider, LLMProviderMeta
 from storage import DatabaseManager, ProviderType
 from config import logger
 from typing import Dict, Optional, List, Any, Type
@@ -14,13 +14,25 @@ class ProviderManager:
         self._provider_instances: Dict[str, BaseLLMProvider] = {}
         logger.info("ProviderManager initialized")
 
-    def register(
-        self, name: str, provider_class: Type[BaseLLMProvider], config: Dict[str, Any]
-    ) -> None:
-        """Register a provider with its configuration"""
-        self._provider_classes[name] = provider_class
-        self._provider_configs[name] = config
-        logger.info(f"Registered provider: {name}")
+    def load_providers(self, config_obj: Any) -> None:
+        """Auto-discover and configure providers from the registry"""
+        registered_count = 0
+
+        for name, cls in LLMProviderMeta.registry.items():
+            try:
+                provider_config = cls.create_config(config_obj)
+
+                if provider_config is not None:
+                    self._provider_classes[name] = cls
+                    self._provider_configs[name] = provider_config
+                    registered_count += 1
+                    logger.info(f"Loaded provider: {name}")
+                else:
+                    logger.debug(f"Skipping provider '{name}': configuration not met")
+            except Exception as e:
+                logger.error(f"Failed to load provider '{name}': {e}")
+
+        logger.info(f"Total providers loaded: {registered_count}")
 
     def get_provider(self, name: str, model: Optional[str] = None) -> BaseLLMProvider:
         """Get or create provider instance"""
@@ -28,16 +40,20 @@ class ProviderManager:
 
         if cache_key not in self._provider_instances:
             if name not in self._provider_classes:
-                raise ValueError(f"Unknown provider: {name}")
+                raise ValueError(f"Unknown or unconfigured provider: {name}")
 
             config = self._provider_configs[name].copy()
             if model:
                 config["model"] = model
 
-            self._provider_instances[cache_key] = self._provider_classes[name](
-                storage=self.storage, **config
-            )
-            logger.info(f"Created provider instance: {cache_key}")
+            try:
+                self._provider_instances[cache_key] = self._provider_classes[name](
+                    storage=self.storage, **config
+                )
+                logger.info(f"Created provider instance: {cache_key}")
+            except Exception as e:
+                logger.error(f"Failed to instantiate provider '{name}': {e}")
+                raise
 
         return self._provider_instances[cache_key]
 
@@ -58,9 +74,12 @@ class ProviderManager:
                 filtered.append(name)
                 continue
 
-            provider_instance = self.get_provider(name)
-            if provider_instance.provider_type != ProviderType.SERVER_HISTORY:
-                filtered.append(name)
+            try:
+                provider_instance = self.get_provider(name)
+                if provider_instance.provider_type != ProviderType.SERVER_HISTORY:
+                    filtered.append(name)
+            except Exception:
+                continue
 
         return filtered
 
@@ -69,8 +88,11 @@ class ProviderManager:
         if provider_name not in self._provider_classes:
             return []
 
-        provider = self.get_provider(provider_name)
-        return provider.get_available_models()
+        try:
+            provider = self.get_provider(provider_name)
+            return provider.get_available_models()
+        except Exception:
+            return []
 
     def get_default_model(self, provider_name: str) -> str:
         """Get default model for a provider"""

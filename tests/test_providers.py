@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, AsyncMock, patch, ANY
 from storage.models import Conversation, MessageRole, ProviderType
 from storage.database import DatabaseManager
 from providers.provider_manager import ProviderManager
+from providers.base import LLMProviderMeta
 from providers.openai_compatible import OpenAICompatibleProvider
 from providers.perplexity import PerplexityProvider
 
@@ -26,25 +27,43 @@ def sample_conversation():
     return conv
 
 
+class ConcreteOpenAIProvider(OpenAICompatibleProvider):
+    PROVIDER_NAME = "test_openai"
+
+    @classmethod
+    def create_config(cls, config):
+        return {"api_key": "sk-test", "model": "gpt-test"}
+
+
 class TestProviderManager:
-    def test_register_and_get_provider(self, mock_storage):
+    def test_load_and_get_provider(self, mock_storage):
+        """Test the new load_providers logic using the Metaclass registry."""
         manager = ProviderManager(mock_storage)
 
-        # Mock a provider class
-        MockClass = MagicMock()
-        MockClass.return_value.provider_type = ProviderType.CLIENT_HISTORY
+        # Mock the Metaclass Registry
+        mock_provider_cls = MagicMock()
+        mock_provider_cls.create_config.return_value = {"api_key": "123"}
 
-        config = {"api_key": "123"}
-        manager.register("test_prov", MockClass, config)
+        # We need the class to appear in the registry
+        with patch.dict(
+            LLMProviderMeta.registry, {"test_prov": mock_provider_cls}, clear=True
+        ):
+            # Mock configuration object
+            MockConfig = MagicMock()
 
-        # Retrieve
-        provider = manager.get_provider("test_prov", model="my-model")
+            # 1. Load Providers
+            manager.load_providers(MockConfig)
 
-        # Verify instantiation
-        MockClass.assert_called_with(
-            storage=mock_storage, api_key="123", model="my-model"
-        )
-        assert provider == MockClass.return_value
+            # Verify create_config was called
+            mock_provider_cls.create_config.assert_called_with(MockConfig)
+
+            # 2. Retrieve Provider
+            provider = manager.get_provider("test_prov", model="my-model")
+
+            # Verify instantiation happens with correct config + model override
+            mock_provider_cls.assert_called_with(
+                storage=mock_storage, api_key="123", model="my-model"
+            )
 
     def test_get_available_providers_filtering(self, mock_storage):
         manager = ProviderManager(mock_storage)
@@ -57,21 +76,17 @@ class TestProviderManager:
         groq_mock = MagicMock()
         groq_mock.provider_type = ProviderType.CLIENT_HISTORY
 
-        # Inject instances directly
+        # Inject instances directly into the manager's cache for testing
         manager._provider_classes = {"perplexity": MagicMock(), "groq": MagicMock()}
-
-        # Mock get_provider to return our typed mocks
-        def get_prov_side_effect(name, model=None):
-            return pplx_mock if name == "perplexity" else groq_mock
-
-        manager.get_provider = MagicMock(side_effect=get_prov_side_effect)
+        manager._provider_configs = {"perplexity": {}, "groq": {}}
+        manager._provider_instances = {"perplexity": pplx_mock, "groq": groq_mock}
 
         # Case 1: New conversation (not active) -> Show all
         available = manager.get_available_providers(in_active_conversation=False)
         assert "perplexity" in available
         assert "groq" in available
 
-        # Case 2: Active conversation, current is 'groq' -> Hide 'perplexity'
+        # Case 2: Active conversation, current is 'groq' -> Hide 'perplexity' (Server History)
         available = manager.get_available_providers(
             in_active_conversation=True, current_provider="groq"
         )
@@ -89,8 +104,12 @@ class TestProviderManager:
 class TestOpenAIProvider:
     @pytest.fixture
     def provider(self, mock_storage):
+        """
+        Use ConcreteOpenAIProvider to avoid TypeError on abstract method instantiation.
+        """
         with patch("providers.openai_compatible.AsyncOpenAI") as mock_client_cls:
-            prov = OpenAICompatibleProvider(
+            # We instantiate the concrete test class, not the abstract base
+            prov = ConcreteOpenAIProvider(
                 storage=mock_storage,
                 api_key="sk-test",
                 base_url="http://test",
@@ -175,8 +194,6 @@ class TestPerplexityProvider:
         mock_resp = MagicMock()
         mock_resp.ok = True
 
-        # Packet 1: Offset 0, chunks ["Hello"] -> Yields "Hello", local offset -> 1.
-        # Packet 2: Offset 1, chunks [" World"] -> Yields " World", local offset -> 2.
         lines_fixed = [
             b'data: {"backend_uuid": "t1"}',
             b'data: {"blocks": [{"intended_usage": "ask_text", "markdown_block": {"chunks": ["Hello"], "chunk_starting_offset": 0}}]}',
@@ -187,11 +204,12 @@ class TestPerplexityProvider:
             for line in lines_fixed:
                 yield line
 
-        # Set the return value correctly
         mock_resp.aiter_lines.return_value = line_iter_fixed()
-
-        # Mock _establish_connection to return our fake response
         provider._establish_connection = AsyncMock(return_value=mock_resp)
 
-        # Execute
         chunks = []
+        async for chunk in provider.generate_response(sample_conversation):
+            chunks.append(chunk)
+
+        assert "Hello" in chunks
+        assert " World" in chunks
